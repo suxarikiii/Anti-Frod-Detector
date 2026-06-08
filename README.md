@@ -53,23 +53,35 @@ Our system solves this problem by combining:
 
 ```mermaid
 flowchart LR
-    A[Frontend Dashboard] --> B[Backend Services<br/>Java + Go]
+    FE[Frontend Dashboard] -->|REST / HTTP| NGINX[Nginx Reverse Proxy]
 
-    B --> C[(Database)]
-    B --> D[Risk Scoring Module]
-    B --> E[Affiliation Graph Logic]
+    NGINX -->|REST| UPLOAD[Upload / Ingestion Service<br/>Go, Амир]
+    NGINX -->|REST| SCORE[Scoring API Service<br/>Kotlin, Эрнест]
+    NGINX -->|REST| REL[Graph / Affiliation API Service<br/>Go, Никита]
 
-    D --> F[Rule-based Scoring]
-    D --> G[ML / Anomaly Detection]
+    UPLOAD --> PG[(PostgreSQL)]
+    SCORE --> PG
+    REL --> PG
 
-    E --> C
-    F --> C
-    G --> C
+    REL --> GDB[(Graph DB<br/>Neo4j / ArangoDB / other)]
 
-    H[Synthetic Dataset Generator] --> B
+    UPLOAD -->|publish: dataset.uploaded| MQ[(RabbitMQ)]
 
-    B --> I[Deployment on VM]
-    A --> I
+    MQ -->|consume: dataset.uploaded| ML[ML Normalization Service<br/>Аня]
+    ML --> PG
+    ML -->|publish: dataset.normalized| MQ
+
+    MQ -->|consume: dataset.normalized| REL
+    REL -->|build graph / relations| GDB
+    REL -->|save affiliation features| PG
+    REL -->|publish: relations.built| MQ
+
+    MQ -->|consume: relations.built| SCORE
+    SCORE -->|save risk scores / explanations| PG
+    SCORE -->|publish: scoring.completed| MQ
+
+    NGINX -->|REST| STATUS[Analysis Status API<br/>Upload Service]
+    STATUS --> PG
 ```
 
 The MVP consists of the following main parts:
@@ -123,7 +135,7 @@ The MVP consists of the following main parts:
   </tr>
   <tr>
     <td align="center"><b>Backend</b></td>
-    <td align="center">Java, Go</td>
+    <td align="center">Kotlin, Go</td>
   </tr>
   <tr>
     <td align="center"><b>Database</b></td>
@@ -140,6 +152,10 @@ The MVP consists of the following main parts:
   <tr>
     <td align="center"><b>Deployment</b></td>
     <td align="center">Docker, VM</td>
+  </tr>
+  <tr>
+    <td align="center"><b>Queue</b></td>
+    <td align="center">RabbitMQ</td>
   </tr>
   <tr>
     <td align="center"><b>Documentation Format</b></td>
