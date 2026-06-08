@@ -7,6 +7,6 @@ data class RiskScore (
     val datasetId: String,
     val score: Int,
     val riskLevel: RiskLevel,
-    val reasons: List<RiskSeason>,
+    val reasons: List<RiskReason>,
     val calculatedAt: Instant
 )
