@@ -5,6 +5,7 @@ import com.antifrod.scoring.model.RiskLevel
 import com.antifrod.scoring.model.RiskReason
 import com.antifrod.scoring.model.RiskScore
 import com.antifrod.scoring.model.SuspiciousUser
+import com.antifrod.scoring.model.UserRiskFeatures
 import org.springframework.stereotype.Service
 import java.time.Instant
 
@@ -18,21 +19,21 @@ class ScoringService {
                 riskScore = 87,
                 riskLevel = RiskLevel.HIGH,
                 topReason = "Same device used by 5 users",
-                relatedUser = 6
+                relatedUsersCount = 6
             ),
             SuspiciousUser(
                 userId = "user_456",
                 riskScore = 64,
                 riskLevel = RiskLevel.MEDIUM,
                 topReason = "Same IP used by 3 users",
-                relatedUser = 3
+                relatedUsersCount = 3
             ),
             SuspiciousUser(
                 userId = "user_789",
                 riskScore = 35,
                 riskLevel = RiskLevel.LOW,
                 topReason = "Promo usage count is above normal",
-                relatedUser = 1
+                relatedUsersCount = 1
             )
         )
     }
@@ -106,6 +107,44 @@ class ScoringService {
                 )
             )
         }
+    }
+
+    private fun calculateReasons(features: UserRiskFeatures): List<RiskReason> {
+        val reasons = mutableListOf<RiskReason>()
+
+        if (features.sameDeviceUserCount >= 3) {
+            reasons += RiskReason(
+                type = "SAME_DEVICE",
+                message = "Same device used by ${features.sameDeviceUserCount} users",
+                scoreImpact = 30
+            )
+        }
+
+        if (features.sameIpUserCount >= 3) {
+            reasons += RiskReason(
+                type = "SAME_IP",
+                message = "Same IP used by ${features.sameIpUserCount} users",
+                scoreImpact = 20
+            )
+        }
+
+        if (features.promoUsageCount >= 5) {
+            reasons += RiskReason(
+                type = "PROMO_ABUSE",
+                message = "Promo code used ${features.promoUsageCount} times",
+                scoreImpact = 20
+            )
+        }
+
+        if (features.hasSuspiciousReferral) {
+            reasons += RiskReason(
+                type = "SUSPICIOUS_REFERRAL",
+                message = "User has suspicious referral relation",
+                scoreImpact = 30
+            )
+        }
+
+        return reasons
     }
 
     private fun resolveRiskLevel(score: Int): RiskLevel {

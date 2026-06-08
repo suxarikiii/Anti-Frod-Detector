@@ -6,5 +6,5 @@ data class SuspiciousUser (
     val riskScore: Int,
     val riskLevel: RiskLevel,
     val topReason: String,
-    val relatedUser: Int
+    val relatedUsersCount: Int
 )
