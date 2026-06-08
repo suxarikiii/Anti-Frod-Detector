@@ -147,6 +147,14 @@ class ScoringService {
         return reasons
     }
 
+    fun processRelationsBuilt(datasetId: String): ScoringProcessingResult {
+        val suspiciousUsers = getSuspiciousUsers(datasetId)
+
+        return ScoringProcessingResult(
+            suspiciousUsersCount = suspiciousUsers.size
+        )
+    }
+
     private fun resolveRiskLevel(score: Int): RiskLevel {
         return when {
             score >= 70 -> RiskLevel.HIGH

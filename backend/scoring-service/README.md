@@ -14,27 +14,27 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Spring%20Web-REST%20API-6DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Web" />
   <img src="https://img.shields.io/badge/Actuator-Health%20Checks-6DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Boot Actuator" />
+<img src="https://img.shields.io/badge/RabbitMQ-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white" alt="RabbitMQ" />
 </p>
 
 <h2 align="center">Service Flow</h2>
 
 ```mermaid
 flowchart TD
-    A[Frontend] -->|GET suspicious users| B[Scoring Controller]
-    A -->|GET user risk| B
-    A -->|POST recalculate| B
+    A[Relations Service] -->|publish relations.built| B[RabbitMQ]
+    B -->|consume relations.built| C[Scoring Service]
 
-    B --> C[Scoring Service]
-    C --> D[Mock Risk Features]
+    C --> D[Read Mock Features]
     D --> E[Rule-based Scoring]
+    E --> F[Risk Score + Reasons]
 
-    E --> F[Risk Reasons]
-    F --> G[Risk Score]
-    G --> H[Risk Level]
+    F -->|publish scoring.completed| B
+    C -->|on error publish pipeline.failed| B
 
-    H --> I[JSON API Response]
-    F --> I
-    I --> A
+    G[Frontend] -->|REST via Nginx| H[Scoring Controller]
+    H --> C
+    C --> I[JSON API Response]
+    I --> G
 ```
 
 <h2 align="center">Rule-based Scoring Draft</h2>
