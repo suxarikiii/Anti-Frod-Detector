@@ -2,6 +2,7 @@ import fnmatch
 import json
 import os
 import pathlib
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -16,11 +17,13 @@ GITHUB_MODEL = os.environ.get("GITHUB_MODEL", "openai/gpt-4.1-mini")
 
 OWNER, REPO = GITHUB_REPOSITORY.split("/", 1)
 
-MAX_DIFF_CHARS = 16_000
-MAX_FILE_DIFF_CHARS = 4_000
-MAX_EXISTING_BODY_CHARS = 4_000
+MAX_DIFF_CHARS = 8_000
+MAX_FILE_DIFF_CHARS = 2_000
+MAX_EXISTING_BODY_CHARS = 1_500
+MAX_SUMMARY_FILES = 80
 
 PR_TEMPLATE_PATH = pathlib.Path(".github/pull_request_template.md")
+
 
 EXCLUDED_DIFF_PATTERNS = [
     # Python generated files
@@ -73,6 +76,46 @@ EXCLUDED_DIFF_PATTERNS = [
     "**/tmp/**",
     "temp/**",
     "**/temp/**",
+]
+
+
+DOMAIN_RULES = [
+    # Backend services
+    ("backend/upload-service/**", "backend"),
+    ("backend/scoring-service/**", "backend"),
+    ("backend/relations-service/**", "backend"),
+    ("backend/graph-affiliation-service/**", "backend"),
+
+    # ML / Data
+    ("backend/ml-service/**", "ml"),
+    ("ml/**", "ml"),
+    ("datasets/**", "data"),
+    ("data/**", "data"),
+
+    # Frontend
+    ("frontend/**", "frontend"),
+
+    # Infrastructure / DevOps
+    ("infra/**", "devops"),
+    ("docker-compose.yml", "devops"),
+    ("**/docker-compose.yml", "devops"),
+    ("Dockerfile", "devops"),
+    ("**/Dockerfile", "devops"),
+    ("infra/nginx/**", "devops"),
+    ("nginx/**", "devops"),
+
+    # CI / GitHub automation
+    (".github/workflows/**", "ci"),
+    (".github/scripts/**", "ci"),
+    (".github/ISSUE_TEMPLATE/**", "ci"),
+    (".github/pull_request_template.md", "ci"),
+    (".github/PULL_REQUEST_TEMPLATE.md", "ci"),
+
+    # Documentation
+    ("README.md", "docs"),
+    ("**/README.md", "docs"),
+    ("docs/**", "docs"),
+    ("*.md", "docs"),
 ]
 
 
@@ -168,6 +211,68 @@ def truncate_text(text: str, max_chars: int, message: str) -> str:
     return text[:max_chars] + f"\n\n[{message}]"
 
 
+def detect_pr_domain(files: list[dict]) -> str:
+    domains: set[str] = set()
+
+    for file in files:
+        filename = file.get("filename", "")
+
+        if not filename:
+            continue
+
+        for pattern, domain in DOMAIN_RULES:
+            if fnmatch.fnmatch(filename, pattern):
+                domains.add(domain)
+
+    if not domains:
+        return "general"
+
+    # Product-code changes are usually more important than docs-only hints.
+    if len(domains) > 1 and "docs" in domains:
+        domains.remove("docs")
+
+    if domains == {"frontend", "backend"}:
+        return "fullstack"
+
+    if "frontend" in domains and "backend" in domains:
+        return "fullstack"
+
+    if len(domains) == 1:
+        return next(iter(domains))
+
+    return ", ".join(sorted(domains))
+
+
+def apply_domain_to_template(template: str, domain: str) -> str:
+    updated_template = re.sub(
+        pattern=r"^# Pull Request\s*\([^)]*\)",
+        repl=f"# Pull Request ({domain})",
+        string=template,
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+    if updated_template == template and "# Pull Request" not in template:
+        return f"# Pull Request ({domain})\n\n{template}"
+
+    return updated_template
+
+
+def ensure_domain_in_body(body: str, domain: str) -> str:
+    updated_body = re.sub(
+        pattern=r"^# Pull Request\s*\([^)]*\)",
+        repl=f"# Pull Request ({domain})",
+        string=body,
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+    if updated_body == body and "# Pull Request" not in body:
+        return f"# Pull Request ({domain})\n\n{body}"
+
+    return updated_body
+
+
 def build_compact_diff(files: list[dict]) -> str:
     if not files:
         return ""
@@ -176,7 +281,9 @@ def build_compact_diff(files: list[dict]) -> str:
 
     result.append("Changed files summary:")
 
-    for file in files:
+    visible_files = files[:MAX_SUMMARY_FILES]
+
+    for file in visible_files:
         filename = file.get("filename", "")
         status = file.get("status", "")
         additions = file.get("additions", 0)
@@ -185,6 +292,11 @@ def build_compact_diff(files: list[dict]) -> str:
 
         result.append(
             f"- {filename} ({status}, +{additions}/-{deletions}, {changes} changes)"
+        )
+
+    if len(files) > MAX_SUMMARY_FILES:
+        result.append(
+            f"- ... {len(files) - MAX_SUMMARY_FILES} more files omitted from summary"
         )
 
     result.append("\nRelevant patches:")
@@ -251,13 +363,19 @@ Add any extra context for reviewers.
 """
 
 
-def build_prompt(template: str, pr: dict, compact_diff: str) -> tuple[str, str]:
+def build_prompt(
+    template: str,
+    pr: dict,
+    compact_diff: str,
+    domain: str,
+) -> tuple[str, str]:
     system_prompt = """
 You write pull request descriptions for software projects.
 
 Strict rules:
 - Fill the provided pull request template.
 - Keep the original headings, HTML tags, separators, and section order.
+- Keep the exact Pull Request heading domain that is already provided in the template.
 - Do not add new sections.
 - Do not remove existing sections.
 - Do not perform code review.
@@ -281,6 +399,9 @@ Strict rules:
     )
 
     user_prompt = f"""
+Detected pull request domain:
+{domain}
+
 Pull request title:
 {pr_title}
 
@@ -309,6 +430,7 @@ Task:
 Fill the pull request template based on the changed files and compact diff.
 
 Section behavior:
+- Keep the first heading exactly as it appears in the template.
 - In Description, write 1 concise paragraph explaining the purpose of the changes.
 - In Changes Made, write 3-7 bullet points with concrete changes.
 - In Additional Notes, write useful context if visible from the diff. If there is no useful extra context, write "No additional notes."
@@ -398,9 +520,14 @@ def main() -> None:
     print(f"Model: {GITHUB_MODEL}")
 
     pr = get_pull_request()
-    template = read_pull_request_template()
-
     files = get_pull_request_files()
+
+    domain = detect_pr_domain(files)
+    print(f"Detected domain: {domain}")
+
+    template = read_pull_request_template()
+    template = apply_domain_to_template(template, domain)
+
     compact_diff = build_compact_diff(files)
 
     if not compact_diff.strip():
@@ -411,12 +538,15 @@ def main() -> None:
         template=template,
         pr=pr,
         compact_diff=compact_diff,
+        domain=domain,
     )
 
     new_body = call_github_models(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
     )
+
+    new_body = ensure_domain_in_body(new_body, domain)
 
     if not new_body.strip():
         raise RuntimeError("Generated pull request body is empty.")
