@@ -1,3 +1,4 @@
+import fnmatch
 import json
 import os
 import pathlib
@@ -15,8 +16,64 @@ GITHUB_MODEL = os.environ.get("GITHUB_MODEL", "openai/gpt-4.1-mini")
 
 OWNER, REPO = GITHUB_REPOSITORY.split("/", 1)
 
-MAX_DIFF_CHARS = 55_000
+MAX_DIFF_CHARS = 16_000
+MAX_FILE_DIFF_CHARS = 4_000
+MAX_EXISTING_BODY_CHARS = 4_000
+
 PR_TEMPLATE_PATH = pathlib.Path(".github/pull_request_template.md")
+
+EXCLUDED_DIFF_PATTERNS = [
+    # Python generated files
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+    "__pycache__/*",
+    "**/__pycache__/*",
+
+    # JVM / Gradle generated or binary files
+    "*.class",
+    "*.jar",
+    "**/build/**",
+    "**/.gradle/**",
+
+    # Frontend generated files
+    "node_modules/**",
+    "**/node_modules/**",
+    "dist/**",
+    "**/dist/**",
+    ".next/**",
+    "**/.next/**",
+    ".vite/**",
+    "**/.vite/**",
+
+    # Lock files can be too noisy for PR description generation
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+
+    # IDE / local files
+    ".idea/**",
+    "**/.idea/**",
+    ".vscode/**",
+    "**/.vscode/**",
+
+    # Logs and local artifacts
+    "*.log",
+    "logs/**",
+    "**/logs/**",
+    "coverage/**",
+    "**/coverage/**",
+
+    # Local uploads / runtime storage
+    "uploads/**",
+    "**/uploads/**",
+    "storage/**",
+    "**/storage/**",
+    "tmp/**",
+    "**/tmp/**",
+    "temp/**",
+    "**/temp/**",
+]
 
 
 def github_json_request(
@@ -24,7 +81,7 @@ def github_json_request(
     url: str,
     body: dict | None = None,
     extra_headers: dict | None = None,
-) -> dict:
+) -> dict | list:
     data = None
 
     if body is not None:
@@ -63,55 +120,109 @@ def github_json_request(
         ) from error
 
 
-def github_text_request(
-    method: str,
-    url: str,
-    accept_header: str,
-) -> str:
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": accept_header,
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-
-    request = urllib.request.Request(
-        url=url,
-        method=method,
-        headers=headers,
-    )
-
-    try:
-        with urllib.request.urlopen(request) as response:
-            return response.read().decode("utf-8", errors="replace")
-
-    except urllib.error.HTTPError as error:
-        error_body = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(
-            f"HTTP {error.code} while calling {url}\n{error_body}"
-        ) from error
-
-
 def get_pull_request() -> dict:
     url = f"{GITHUB_API_URL}/repos/{OWNER}/{REPO}/pulls/{PR_NUMBER}"
-    return github_json_request("GET", url)
+    response = github_json_request("GET", url)
+
+    if not isinstance(response, dict):
+        raise RuntimeError("Unexpected pull request response format.")
+
+    return response
 
 
-def get_pull_request_diff() -> str:
-    url = f"{GITHUB_API_URL}/repos/{OWNER}/{REPO}/pulls/{PR_NUMBER}"
+def get_pull_request_files() -> list[dict]:
+    files: list[dict] = []
+    page = 1
 
-    diff = github_text_request(
-        method="GET",
-        url=url,
-        accept_header="application/vnd.github.v3.diff",
-    )
-
-    if len(diff) > MAX_DIFF_CHARS:
-        return (
-            diff[:MAX_DIFF_CHARS]
-            + "\n\n[Diff truncated because it is too large.]"
+    while True:
+        url = (
+            f"{GITHUB_API_URL}/repos/{OWNER}/{REPO}/pulls/{PR_NUMBER}/files"
+            f"?per_page=100&page={page}"
         )
 
-    return diff
+        response = github_json_request("GET", url)
+
+        if not isinstance(response, list):
+            raise RuntimeError("Unexpected pull request files response format.")
+
+        if not response:
+            break
+
+        files.extend(response)
+        page += 1
+
+    return files
+
+
+def should_exclude_file(path: str) -> bool:
+    return any(
+        fnmatch.fnmatch(path, pattern)
+        for pattern in EXCLUDED_DIFF_PATTERNS
+    )
+
+
+def truncate_text(text: str, max_chars: int, message: str) -> str:
+    if len(text) <= max_chars:
+        return text
+
+    return text[:max_chars] + f"\n\n[{message}]"
+
+
+def build_compact_diff(files: list[dict]) -> str:
+    if not files:
+        return ""
+
+    result: list[str] = []
+
+    result.append("Changed files summary:")
+
+    for file in files:
+        filename = file.get("filename", "")
+        status = file.get("status", "")
+        additions = file.get("additions", 0)
+        deletions = file.get("deletions", 0)
+        changes = file.get("changes", 0)
+
+        result.append(
+            f"- {filename} ({status}, +{additions}/-{deletions}, {changes} changes)"
+        )
+
+    result.append("\nRelevant patches:")
+
+    total_chars = 0
+
+    for file in files:
+        filename = file.get("filename", "")
+
+        if not filename:
+            continue
+
+        result.append(f"\n--- {filename} ---")
+
+        if should_exclude_file(filename):
+            result.append("[Skipped generated, binary, local, or noisy file]")
+            continue
+
+        patch = file.get("patch")
+
+        if not patch:
+            result.append("[No text patch available]")
+            continue
+
+        patch = truncate_text(
+            text=patch,
+            max_chars=MAX_FILE_DIFF_CHARS,
+            message="File diff truncated because it is too large.",
+        )
+
+        if total_chars + len(patch) > MAX_DIFF_CHARS:
+            result.append("[Remaining diff skipped because total diff is too large.]")
+            break
+
+        result.append(patch)
+        total_chars += len(patch)
+
+    return "\n".join(result)
 
 
 def read_pull_request_template() -> str:
@@ -140,7 +251,7 @@ Add any extra context for reviewers.
 """
 
 
-def build_prompt(template: str, pr: dict, diff: str) -> tuple[str, str]:
+def build_prompt(template: str, pr: dict, compact_diff: str) -> tuple[str, str]:
     system_prompt = """
 You write pull request descriptions for software projects.
 
@@ -152,8 +263,8 @@ Strict rules:
 - Do not perform code review.
 - Do not suggest improvements.
 - Do not mention AI, automation, GitHub Models, bots, generated text, or this workflow.
-- Describe only what is visible in the pull request title, branches, commits, and diff.
-- Do not invent business context that is not visible in the diff.
+- Describe only what is visible in the pull request title, branches, commits, changed files, and patches.
+- Do not invent business context that is not visible in the pull request.
 - Use concise, professional developer style.
 - Output only the final Markdown body.
 """.strip()
@@ -162,6 +273,12 @@ Strict rules:
     source_branch = pr.get("head", {}).get("ref", "")
     target_branch = pr.get("base", {}).get("ref", "")
     existing_body = pr.get("body") or ""
+
+    existing_body = truncate_text(
+        text=existing_body,
+        max_chars=MAX_EXISTING_BODY_CHARS,
+        message="Existing pull request body truncated because it is too large.",
+    )
 
     user_prompt = f"""
 Pull request title:
@@ -183,13 +300,13 @@ Pull request template:
 {template}
 ```
 
-Pull request diff:
+Pull request changed files and compact diff:
 ```diff
-{diff}
+{compact_diff}
 ```
 
 Task:
-Fill the pull request template based on the diff.
+Fill the pull request template based on the changed files and compact diff.
 
 Section behavior:
 - In Description, write 1 concise paragraph explaining the purpose of the changes.
@@ -230,6 +347,9 @@ def call_github_models(system_prompt: str, user_prompt: str) -> str:
             "Content-Type": "application/json",
         },
     )
+
+    if not isinstance(response, dict):
+        raise RuntimeError("Unexpected GitHub Models response format.")
 
     try:
         content = response["choices"][0]["message"]["content"]
@@ -279,16 +399,18 @@ def main() -> None:
 
     pr = get_pull_request()
     template = read_pull_request_template()
-    diff = get_pull_request_diff()
 
-    if not diff.strip():
+    files = get_pull_request_files()
+    compact_diff = build_compact_diff(files)
+
+    if not compact_diff.strip():
         print("PR diff is empty. Skipping description generation.")
         return
 
     system_prompt, user_prompt = build_prompt(
         template=template,
         pr=pr,
-        diff=diff,
+        compact_diff=compact_diff,
     )
 
     new_body = call_github_models(
@@ -308,5 +430,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Error: {error}", file=sys.stderr)
-        sys.exit(1)
+        print(f"Warning: {error}", file=sys.stderr)
+        sys.exit(0)
