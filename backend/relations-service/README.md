@@ -1,7 +1,7 @@
-<h1 align="center">Relations Service</h1>
+<h1 align="center">Graph / Refund Relations Service</h1>
 
 <p align="center">
-  Graph / Relations Service for refund approval risk detection in e-commerce support.
+  Graph / Relations Service for suspicious refund approval detection in e-commerce support.
 </p>
 
 ---
@@ -25,6 +25,15 @@ refund.scoring.completed
   -> dashboard / analysis status
 ```
 
+The service is responsible for:
+
+* Graph DB integration;
+* refund relations graph;
+* entities: Customer, Order, ReturnRequest, SupportAgent, ProductCategory, Decision;
+* relation features for scoring;
+* consuming `dataset.normalized`;
+* publishing `refund.relations.built`.
+
 ---
 
 <h2 align="center">Domain Graph Model</h2>
@@ -42,14 +51,22 @@ Vertices:
 
 Edges:
 
-* `Customer - PLACED_ORDER -> Order`
-* `Order - HAS_RETURN_REQUEST -> ReturnRequest`
-* `ReturnRequest - DECIDED_BY -> SupportAgent`
-* `Order - HAS_CATEGORY -> ProductCategory`
-* `SupportAgent - MADE_DECISION -> Decision`
-* `Decision - APPROVED_RETURN -> ReturnRequest`
-* `Customer - USES_ADDRESS -> DeliveryAddress`
-* `Customer - USES_PAYMENT_METHOD -> PaymentMethod`
+```text
+Customer --PLACED_ORDER--> Order
+Customer --REQUESTED_RETURN--> ReturnRequest
+Order --HAS_RETURN_REQUEST--> ReturnRequest
+ReturnRequest --DECIDED_BY--> SupportAgent
+Order --HAS_CATEGORY--> ProductCategory
+Order --CONTAINS_CATEGORY--> ProductCategory
+SupportAgent --MADE_DECISION--> Decision
+Decision --APPROVED_RETURN--> ReturnRequest
+SupportAgent --APPROVED_RETURN--> ReturnRequest
+SupportAgent --DECLINED_RETURN--> ReturnRequest
+Customer --USES_ADDRESS--> DeliveryAddress
+Customer --USES_PAYMENT_METHOD--> PaymentMethod
+Customer --REPEATED_REFUND_PATTERN--> Customer
+SupportAgent --REPEATED_APPROVAL_PATTERN--> Customer
+```
 
 ---
 
@@ -162,5 +179,13 @@ The service prepares:
 * `categoryRefundRate`
 * `similarReturnsCount`
 * `clusterSize`
+
+Additional planned graph-derived features:
+
+* `agentManualOverrideRate`
+* `agentCustomerInteractionCount`
+* `refundAmountRatio`
+* `sameReasonRefundCount`
+* `strongestRelationType`
 
 These features are used by scoring-service to calculate refund approval risk and produce human-readable explanations.
