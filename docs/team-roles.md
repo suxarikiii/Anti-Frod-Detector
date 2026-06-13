@@ -1,69 +1,91 @@
 <h1 align="center">Team Roles and Weekly Reports</h1>
 
-<p align="center">
-  This document describes team workflow, weekly report responsibilities, and contribution tracking rules.
-</p>
-
-<p align="center">
-  The document is a work in progress and may be updated as the project evolves.
-</p>
-
----
-
-<h2 align="center">General Team Workflow</h2>
+This document describes team workflow, responsibilities, weekly report ownership, and contribution tracking rules.
 
 The team works on a startup-track MVP called **Fraud & Abuse Detection System**.
 
-The project is divided into several main areas:
+The current MVP domain is suspicious refund approvals in e-commerce support workflows.
 
-* backend;
-* frontend;
-* DevOps;
-* ML / data generation;
-* documentation;
-* weekly reporting and demo preparation.
+<h2 align="center">Team Responsibilities</h2>
 
-Each team member is responsible for their assigned tasks and should keep the team updated about their progress, blockers, and next steps.
+<h2 align="center">Amir - Upload / Ingestion Service + Nginx</h2>
 
-GitHub should be used as the main place for tracking project work:
+Responsible for:
 
-* issues should describe concrete tasks;
-* branches should match the main project areas;
-* pull requests should describe completed changes;
-* project board should show the current task status.
+* CSV dataset upload;
+* dataset metadata;
+* dataset preview;
+* analysis job creation;
+* analysis status endpoint;
+* publishing `dataset.uploaded`;
+* Nginx routing for backend APIs.
 
----
+<h2 align="center">Anya - ML / Data Normalization</h2>
+
+Responsible for:
+
+* synthetic refund dataset;
+* clean and dirty business CSV examples;
+* column mapping rules;
+* normalization into internal refund approval format;
+* publishing `dataset.normalized`.
+
+<h2 align="center">Nikita - Graph / Relations Service</h2>
+
+Responsible for:
+
+* Graph DB integration;
+* refund relations graph;
+* entities: Customer, Order, ReturnRequest, SupportAgent, ProductCategory, Decision;
+* relation features for scoring;
+* publishing `refund.relations.built`.
+
+<h2 align="center">Ernest - Kotlin Scoring Service</h2>
+
+Responsible for:
+
+* refund approval risk score;
+* risk levels;
+* scoring rules;
+* explanations;
+* suspicious refund approvals API;
+* consuming `refund.relations.built`;
+* publishing `refund.scoring.completed`.
+
+<h2 align="center">Islam - Frontend Dashboard</h2>
+
+Responsible for:
+
+* upload dataset page;
+* preview / mapping page;
+* analysis status page;
+* suspicious refund approvals table;
+* refund approval details page;
+* support agent and customer context UI.
+
+<h2 align="center">Amina - DevOps / Infrastructure</h2>
+
+Responsible for:
+
+* Docker Compose;
+* PostgreSQL;
+* RabbitMQ;
+* Graph DB;
+* Nginx integration;
+* local and VM deployment.
 
 <h2 align="center">Working Branches</h2>
 
 The repository uses several main working branches based on project areas:
 
-<table align="center">
-  <tr>
-    <th align="center">Branch</th>
-    <th align="center">Responsibility</th>
-  </tr>
-  <tr>
-    <td align="center"><code>backend</code></td>
-    <td align="center">Backend services, APIs, business logic, database interaction, and risk score endpoints.</td>
-  </tr>
-  <tr>
-    <td align="center"><code>frontend</code></td>
-    <td align="center">Analyst dashboard, UI components, frontend logic, tables, filters, and user details pages.</td>
-  </tr>
-  <tr>
-    <td align="center"><code>devops</code></td>
-    <td align="center">Docker setup, VM deployment, environment configuration, infrastructure, and CI/CD.</td>
-  </tr>
-  <tr>
-    <td align="center"><code>ml</code></td>
-    <td align="center">Synthetic dataset generation, ML-assisted scoring, anomaly detection, and validation metrics.</td>
-  </tr>
-</table>
+| Branch | Responsibility |
+| --- | --- |
+| `backend` | Backend services, APIs, business logic, database interaction, and refund approval risk endpoints. |
+| `frontend` | Analyst dashboard, upload flow, status page, suspicious refund approvals table, and details pages. |
+| `devops` | Docker setup, VM deployment, environment configuration, infrastructure, and CI/CD. |
+| `ml` | Synthetic refund datasets, normalization, ML-assisted scoring, anomaly detection, and validation metrics. |
 
 The working branches are permanent and should not be deleted after merging into `main`.
-
----
 
 <h2 align="center">Progress Reporting</h2>
 
@@ -73,8 +95,6 @@ Each team member should regularly report:
 * what is currently in progress;
 * what problems or blockers appeared;
 * what is planned next.
-
-Progress updates should be short, clear, and connected to GitHub issues whenever possible.
 
 Recommended update format:
 
@@ -92,44 +112,18 @@ Next:
 - ...
 ```
 
----
-
 <h2 align="center">Weekly Report Schedule</h2>
 
 Week 1 report is not required, so weekly report responsibility starts from Week 2.
 
-<table align="center">
-  <tr>
-    <th align="center">Week</th>
-    <th align="center">Responsible Pair</th>
-  </tr>
-  <tr>
-    <td align="center">Week 2</td>
-    <td align="center">Amir + Ernest</td>
-  </tr>
-  <tr>
-    <td align="center">Week 3</td>
-    <td align="center">Anna + Aminat</td>
-  </tr>
-  <tr>
-    <td align="center">Week 4</td>
-    <td align="center">Islam + Nikita</td>
-  </tr>
-  <tr>
-    <td align="center">Week 5</td>
-    <td align="center">Amir + Ernest</td>
-  </tr>
-  <tr>
-    <td align="center">Week 6</td>
-    <td align="center">Anna + Aminat</td>
-  </tr>
-  <tr>
-    <td align="center">Week 7</td>
-    <td align="center">Islam + Nikita</td>
-  </tr>
-</table>
-
----
+| Week | Responsible Pair |
+| --- | --- |
+| Week 2 | Amir + Ernest |
+| Week 3 | Anna + Aminat |
+| Week 4 | Islam + Nikita |
+| Week 5 | Amir + Ernest |
+| Week 6 | Anna + Aminat |
+| Week 7 | Islam + Nikita |
 
 <h2 align="center">Responsibilities of the Weekly Report Pair</h2>
 
@@ -148,8 +142,6 @@ The responsible pair should:
 
 The responsible pair coordinates the weekly report process, but every team member must still provide information about their own work.
 
----
-
 <h2 align="center">Individual Contribution Tracking</h2>
 
 Each team member should make their contribution visible through:
@@ -160,16 +152,6 @@ Each team member should make their contribution visible through:
 * weekly updates;
 * notes in weekly reports;
 * demo participation if relevant.
-
-A good contribution update should answer:
-
-* What task was assigned?
-* What was completed?
-* What is still in progress?
-* What problems appeared?
-* What will be done next?
-
----
 
 <h2 align="center">Documentation Updates</h2>
 

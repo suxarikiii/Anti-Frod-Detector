@@ -1,7 +1,7 @@
-<h1 align="center">Suspicious Refund Approval Detection System</h1>
+<h1 align="center">Fraud & Abuse Detection System</h1>
 
 <p align="center">
-  A B2B platform for e-commerce companies that detects suspicious refund approvals by analyzing orders, return requests, and support team decisions.
+  A B2B platform for e-commerce companies that detects suspicious refund approvals by analyzing order history, return requests, and customer support decisions.
 </p>
 
 ---
@@ -17,8 +17,20 @@ The system helps e-commerce companies analyze historical data about:
 * refund amounts;
 * support agent decisions;
 * approval and decline patterns;
+* customer return history;
+* support agent approval patterns;
 * suspicious customer-agent interactions;
 * unusual refund behavior.
+
+Examples of suspicious cases include:
+
+* high-value refund approved without evidence;
+* refund approved too quickly;
+* manual override on expensive order;
+* customer requests refunds too frequently;
+* support agent has unusually high approval rate;
+* same agent repeatedly approves refunds for the same customer;
+* refund amount is close to full order amount.
 
 The main goal is not only to show raw return data, but to calculate a **refund approval risk score** and explain why a specific refund approval may be suspicious.
 
@@ -30,12 +42,13 @@ The platform is designed for analysts, fraud teams, support managers, and e-comm
 
 **Startup track**
 
-We are building a working MVP for a clear customer segment: **e-commerce companies with a significant number of refund requests and support decisions**.
+We are building a working MVP for a clear customer segment: **e-commerce companies with significant refund volume and customer support teams**.
 
 Potential customer segments include:
 
 * online marketplaces;
 * e-commerce stores;
+* retail platforms;
 * delivery platforms with order refunds;
 * retail platforms with customer support teams;
 * companies with high refund volume;
@@ -150,6 +163,22 @@ The MVP consists of the following main parts:
 
 ---
 
+<h2 align="center">User Flow</h2>
+
+The main user flow starts with uploading an e-commerce refund dataset and ends with an analyst reviewing suspicious refund approvals with risk explanations.
+
+```mermaid
+flowchart LR
+  A[Upload refund dataset] --> B[Preview data] 
+  B --> C[Confirm mapping] 
+  C --> D[Start analysis] 
+  D --> E[Track status] 
+  E --> F[Suspicious approvals dashboard] 
+  F --> G[Refund approval details] 
+  G --> H[Risk score + explanations]
+  H --> I[Investigation decision]
+```
+
 <h2 align="center">Project Resources</h2>
 
 <p align="center">
@@ -208,7 +237,7 @@ The MVP consists of the following main parts:
   </tr>
 
   <tr>
-    <td align="center" rowspan="5"><b>Documentation</b></td>
+    <td align="center" rowspan="10"><b>Documentation</b></td>
     <td align="center"><a href="./docs/project-plan.md"><b>Project Plan</b></a></td>
     <td align="center">7-week project plan, milestones, and expected results</td>
   </tr>
@@ -223,6 +252,26 @@ The MVP consists of the following main parts:
   <tr>
     <td align="center"><a href="./docs/team-roles.md"><b>Team Roles</b></a></td>
     <td align="center">Team responsibilities and weekly report schedule</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/data-format.md"><b>Data Format</b></a></td>
+    <td align="center">CSV columns and synthetic refund scenario examples</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/scoring-rules.md"><b>Scoring Rules</b></a></td>
+    <td align="center">Rule-based refund approval risk score logic and risk levels</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/rabbitmq-events.md"><b>RabbitMQ Events</b></a></td>
+    <td align="center">Asynchronous processing events and payload examples</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/graph-model.md"><b>Graph Model</b></a></td>
+    <td align="center">Refund relation graph vertices, edges, and use cases</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/api-contracts.md"><b>API Contracts</b></a></td>
+    <td align="center">MVP endpoint contracts for upload, ML, relations, and scoring services</td>
   </tr>
   <tr>
     <td align="center"><a href="./docs/reports/"><b>Weekly Reports</b></a></td>
@@ -274,7 +323,7 @@ The scoring service calculates a risk score for a specific refund approval.
 The main scoring target is:
 
 ```text
-Refund approval risk score
+refund approval risk score
 ```
 
 Risk factors may include:
@@ -359,8 +408,8 @@ By the end of the project, we aim to build a working MVP that demonstrates the f
 1. A business user uploads an e-commerce refund dataset.
 2. The system shows dataset preview.
 3. The system detects or applies column mapping.
-4. Raw data is normalized into internal order, return, customer, and support decision entities.
-5. The system builds relationships between customers, orders, returns, support agents, and products.
+4. Raw data is normalized into internal order, return, customer, support agent, and decision entities.
+5. The system builds relationships between customers, orders, return requests, support agents, and products.
 6. A refund approval risk score is calculated.
 7. The system explains why a refund approval is suspicious.
 8. An analyst views suspicious refund approvals in the dashboard.
