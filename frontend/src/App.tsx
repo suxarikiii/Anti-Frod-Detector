@@ -1,0 +1,936 @@
+import {
+  CBadge,
+  CButton,
+  CCard,
+  CCardBody,
+  CCardHeader,
+  CCol,
+  CContainer,
+  CFormInput,
+  CFormLabel,
+  CFormSelect,
+  CFormText,
+  CHeader,
+  CHeaderBrand,
+  CInputGroup,
+  CInputGroupText,
+  CListGroup,
+  CListGroupItem,
+  CNav,
+  CNavItem,
+  CNavLink,
+  CProgress,
+  CProgressBar,
+  CRow,
+  CSidebar,
+  CSidebarBrand,
+  CSidebarFooter,
+  CSidebarHeader,
+  CTable,
+  CTableBody,
+  CTableDataCell,
+  CTableHead,
+  CTableHeaderCell,
+  CTableRow,
+} from "@coreui/react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  FileSpreadsheet,
+  Filter,
+  Gauge,
+  LayoutDashboard,
+  Search,
+  ShieldAlert,
+  Upload,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import antiFraudLogoFull from "./assets/brand/anti-fraud-logo-full.png";
+import antiFraudLogoMark from "./assets/brand/anti-fraud-logo-mark.png";
+
+type Page = "dataset" | "approvals" | "details";
+type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+type Decision = "APPROVED" | "REJECTED";
+
+type Approval = {
+  returnId: string;
+  orderId: string;
+  customerId: string;
+  supportAgentId: string;
+  refundAmount: number;
+  decision: Decision;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  topReason: string;
+};
+
+type Explanation = {
+  type: string;
+  message: string;
+  scoreImpact: number;
+};
+
+type ReturnRisk = Approval & {
+  orderAmount: number;
+  productCategory: string;
+  returnReason: string;
+  evidenceProvided: boolean;
+  manualOverride: boolean;
+  decisionTimeMinutes: number;
+  paymentMethod: string;
+  shippingRegion: string;
+  explanations: Explanation[];
+  relatedApprovals: Approval[];
+};
+
+type AnalysisStatus =
+  | "UPLOADED"
+  | "NORMALIZING"
+  | "NORMALIZED"
+  | "BUILDING_RELATIONS"
+  | "SCORING"
+  | "COMPLETED";
+
+const datasetId = "dataset_demo_001";
+
+const previewRows = [
+  {
+    order_id: "order_456",
+    customer_id: "customer_789",
+    return_id: "return_123",
+    support_agent_id: "agent_001",
+    order_amount: "11999.00",
+    refund_amount: "11500.00",
+    product_category: "electronics",
+    return_reason: "item_not_as_described",
+    evidence_provided: "false",
+    decision: "APPROVED",
+    manual_override: "true",
+    decision_time_minutes: "2",
+  },
+  {
+    order_id: "order_785",
+    customer_id: "customer_184",
+    return_id: "return_204",
+    support_agent_id: "agent_002",
+    order_amount: "3490.00",
+    refund_amount: "1290.00",
+    product_category: "clothing",
+    return_reason: "size_issue",
+    evidence_provided: "true",
+    decision: "APPROVED",
+    manual_override: "false",
+    decision_time_minutes: "18",
+  },
+  {
+    order_id: "order_901",
+    customer_id: "customer_789",
+    return_id: "return_891",
+    support_agent_id: "agent_001",
+    order_amount: "8990.00",
+    refund_amount: "8990.00",
+    product_category: "mobile_accessories",
+    return_reason: "defective",
+    evidence_provided: "false",
+    decision: "APPROVED",
+    manual_override: "true",
+    decision_time_minutes: "3",
+  },
+];
+
+const mapping = {
+  order_id: "order_id",
+  customer_id: "customer_id",
+  return_id: "return_id",
+  support_agent_id: "support_agent_id",
+  order_amount: "order_amount",
+  refund_amount: "refund_amount",
+  product_category: "product_category",
+  return_reason: "return_reason",
+  evidence_provided: "evidence_provided",
+  decision: "decision",
+  manual_override: "manual_override",
+  decision_time_minutes: "decision_time_minutes",
+};
+
+const approvals: Approval[] = [
+  {
+    returnId: "return_123",
+    orderId: "order_456",
+    customerId: "customer_789",
+    supportAgentId: "agent_001",
+    refundAmount: 11500,
+    decision: "APPROVED",
+    riskScore: 84,
+    riskLevel: "CRITICAL",
+    topReason: "Refund approved without evidence for high-value order",
+  },
+  {
+    returnId: "return_891",
+    orderId: "order_901",
+    customerId: "customer_789",
+    supportAgentId: "agent_001",
+    refundAmount: 8990,
+    decision: "APPROVED",
+    riskScore: 81,
+    riskLevel: "CRITICAL",
+    topReason: "Repeated customer-agent pair with manual override",
+  },
+  {
+    returnId: "return_377",
+    orderId: "order_812",
+    customerId: "customer_412",
+    supportAgentId: "agent_004",
+    refundAmount: 6400,
+    decision: "APPROVED",
+    riskScore: 76,
+    riskLevel: "HIGH",
+    topReason: "Fast approval for full amount refund",
+  },
+  {
+    returnId: "return_204",
+    orderId: "order_785",
+    customerId: "customer_184",
+    supportAgentId: "agent_002",
+    refundAmount: 1290,
+    decision: "APPROVED",
+    riskScore: 42,
+    riskLevel: "MEDIUM",
+    topReason: "Customer has elevated return frequency",
+  },
+  {
+    returnId: "return_618",
+    orderId: "order_270",
+    customerId: "customer_029",
+    supportAgentId: "agent_003",
+    refundAmount: 399,
+    decision: "REJECTED",
+    riskScore: 18,
+    riskLevel: "LOW",
+    topReason: "Low amount, decision rejected",
+  },
+];
+
+const riskDetails: ReturnRisk = {
+  ...approvals[0],
+  orderAmount: 11999,
+  productCategory: "electronics",
+  returnReason: "item_not_as_described",
+  evidenceProvided: false,
+  manualOverride: true,
+  decisionTimeMinutes: 2,
+  paymentMethod: "card",
+  shippingRegion: "Moscow",
+  explanations: [
+    {
+      type: "NO_EVIDENCE",
+      message: "Return was approved without photo, chat, or delivery evidence.",
+      scoreImpact: 25,
+    },
+    {
+      type: "HIGH_VALUE_REFUND",
+      message: "Refund amount is above the high-value threshold.",
+      scoreImpact: 20,
+    },
+    {
+      type: "FAST_APPROVAL",
+      message: "Support decision was made in 2 minutes.",
+      scoreImpact: 15,
+    },
+    {
+      type: "MANUAL_OVERRIDE",
+      message: "Agent used manual override on an approved refund.",
+      scoreImpact: 20,
+    },
+    {
+      type: "REPEATED_AGENT_CUSTOMER_PAIR",
+      message: "Same agent approved multiple refunds for this customer.",
+      scoreImpact: 25,
+    },
+  ],
+  relatedApprovals: approvals.slice(1, 4),
+};
+
+const statusSteps: AnalysisStatus[] = [
+  "UPLOADED",
+  "NORMALIZING",
+  "NORMALIZED",
+  "BUILDING_RELATIONS",
+  "SCORING",
+  "COMPLETED",
+];
+
+const statusDescriptions: Record<AnalysisStatus, string> = {
+  UPLOADED: "File received",
+  NORMALIZING: "Columns detected",
+  NORMALIZED: "Rows prepared",
+  BUILDING_RELATIONS: "Relations built",
+  SCORING: "Risk scores calculated",
+  COMPLETED: "Ready for review",
+};
+
+const navItems: Array<{ page: Page; label: string; icon: typeof Upload }> = [
+  { page: "dataset", label: "Dataset", icon: Upload },
+  { page: "approvals", label: "Approvals", icon: LayoutDashboard },
+  { page: "details", label: "Investigation", icon: ShieldAlert },
+];
+
+const columnLabels: Record<string, string> = {
+  returnId: "Return ID",
+  orderId: "Order ID",
+  customerId: "Customer ID",
+  supportAgentId: "Agent ID",
+  refundAmount: "Refund amount",
+  decision: "Decision",
+  riskScore: "Risk score",
+  riskLevel: "Risk level",
+  topReason: "Main reason",
+  order_id: "Order ID",
+  customer_id: "Customer ID",
+  return_id: "Return ID",
+  support_agent_id: "Agent ID",
+  order_amount: "Order amount",
+  refund_amount: "Refund amount",
+  product_category: "Category",
+  return_reason: "Return reason",
+  evidence_provided: "Evidence",
+  manual_override: "Manual override",
+  decision_time_minutes: "Decision time",
+};
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatEnum(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+async function fetchJson<T>(url: string, fallback: T): Promise<T> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(response.statusText);
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) throw new Error("Expected JSON response");
+    return (await response.json()) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function App() {
+  const [page, setPage] = useState<Page>("dataset");
+  const [uploadedFile, setUploadedFile] = useState("refunds_week1_demo.csv");
+  const [uploadProgress, setUploadProgress] = useState(100);
+  const [selectedApproval, setSelectedApproval] = useState<ReturnRisk>(riskDetails);
+  const [riskFilter, setRiskFilter] = useState<"ALL" | RiskLevel>("ALL");
+  const [query, setQuery] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStepIndex, setAnalysisStepIndex] = useState(-1);
+
+  const filteredApprovals = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return approvals.filter((approval) => {
+      const matchesRisk = riskFilter === "ALL" || approval.riskLevel === riskFilter;
+      const matchesSearch =
+        !normalized ||
+        [approval.returnId, approval.customerId, approval.supportAgentId, approval.orderId]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalized);
+      return matchesRisk && matchesSearch;
+    });
+  }, [query, riskFilter]);
+
+  async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadedFile(file.name);
+    setUploadProgress(35);
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    setUploadProgress(100);
+  }
+
+  async function startAnalysis() {
+    setIsAnalyzing(true);
+    setAnalysisStepIndex(0);
+    await fetchJson(`/api/datasets/${datasetId}/preview`, previewRows);
+    for (let index = 0; index < statusSteps.length; index += 1) {
+      setAnalysisStepIndex(index);
+      await new Promise((resolve) => window.setTimeout(resolve, index === statusSteps.length - 1 ? 900 : 1100));
+    }
+    setIsAnalyzing(false);
+    setPage("approvals");
+  }
+
+  async function openApproval(approval: Approval) {
+    const data = await fetchJson<ReturnRisk>(
+      `/api/scoring/returns/${approval.returnId}/risk`,
+      { ...riskDetails, ...approval },
+    );
+    setSelectedApproval(data);
+    setPage("details");
+  }
+
+  return (
+    <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
+      <CSidebar className="app-sidebar" narrow={sidebarCollapsed} unfoldable={false} visible>
+        <CSidebarHeader>
+          <CSidebarBrand className="sidebar-brand">
+            {sidebarCollapsed ? (
+              <img alt="Anti-Fraud" className="brand-mark" src={antiFraudLogoMark} />
+            ) : (
+              <img alt="Anti-Fraud" className="brand-logo" src={antiFraudLogoFull} />
+            )}
+          </CSidebarBrand>
+        </CSidebarHeader>
+
+        <CNav className="sidebar-nav" variant="pills">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <CNavItem key={item.page}>
+                <CNavLink active={page === item.page} as="button" onClick={() => setPage(item.page)}>
+                  <Icon size={18} />
+                  {!sidebarCollapsed && <span>{item.label}</span>}
+                </CNavLink>
+              </CNavItem>
+            );
+          })}
+        </CNav>
+
+        <CSidebarFooter>
+          <div className="sidebar-collapse-row">
+            <CButton
+              color="secondary"
+              size="sm"
+              variant="ghost"
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              {!sidebarCollapsed && <span>Collapse sidebar</span>}
+            </CButton>
+          </div>
+        </CSidebarFooter>
+      </CSidebar>
+
+      <main className="main">
+        <CHeader className="app-header">
+          <CHeaderBrand as="h1">Refund approval risk analytics</CHeaderBrand>
+        </CHeader>
+
+        {page === "dataset" && (
+          <DatasetPage
+            uploadedFile={uploadedFile}
+            uploadProgress={uploadProgress}
+            isAnalyzing={isAnalyzing}
+            analysisStepIndex={analysisStepIndex}
+            onUpload={handleUpload}
+            onStart={startAnalysis}
+          />
+        )}
+        {page === "approvals" && (
+          <ApprovalsPage
+            approvals={filteredApprovals}
+            query={query}
+            riskFilter={riskFilter}
+            onQueryChange={setQuery}
+            onRiskFilterChange={setRiskFilter}
+            onOpenApproval={openApproval}
+          />
+        )}
+        {page === "details" && <DetailsPage approval={selectedApproval} onOpenApproval={openApproval} />}
+      </main>
+    </div>
+  );
+}
+
+function DatasetPage({
+  uploadedFile,
+  uploadProgress,
+  isAnalyzing,
+  analysisStepIndex,
+  onUpload,
+  onStart,
+}: {
+  uploadedFile: string;
+  uploadProgress: number;
+  isAnalyzing: boolean;
+  analysisStepIndex: number;
+  onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onStart: () => void;
+}) {
+  return (
+    <CContainer fluid className="px-0">
+      <CRow className="g-4 mb-4">
+        <CCol lg={5}>
+          <CCard className="h-100">
+            <CCardHeader>
+              <SectionTitle icon={Upload} title="Upload dataset" text="Upload a CSV file and review the detected structure." />
+            </CCardHeader>
+            <CCardBody>
+              <CFormLabel className="dropzone">
+                <FileSpreadsheet size={34} />
+                <strong>{uploadedFile}</strong>
+                <span>Choose CSV file</span>
+                <CFormInput accept=".csv" className="visually-hidden" onChange={onUpload} type="file" />
+              </CFormLabel>
+
+              <div className="d-flex justify-content-between mt-4 mb-2">
+                <span>Upload progress</span>
+                <strong>{uploadProgress}%</strong>
+              </div>
+              <CProgress className="mb-4" height={10}>
+                <CProgressBar color="primary" value={uploadProgress} />
+              </CProgress>
+
+              {isAnalyzing && (
+                <div className="document-loader mb-4" role="status" aria-live="polite">
+                  <div className="document-loader-icon">
+                    <FileSpreadsheet size={24} />
+                  </div>
+                  <div className="flex-grow-1">
+                    <strong>Preparing document</strong>
+                    <CProgress className="mt-2" height={8}>
+                      <CProgressBar color="primary" animated value={100} />
+                    </CProgress>
+                  </div>
+                </div>
+              )}
+
+              <CButton color="primary" disabled={isAnalyzing} onClick={onStart}>
+                {isAnalyzing ? (
+                  <>
+                    Analyzing <span className="button-spinner" aria-hidden="true" />
+                  </>
+                ) : (
+                  <>
+                    Start analysis <ArrowRight size={17} />
+                  </>
+                )}
+              </CButton>
+            </CCardBody>
+          </CCard>
+        </CCol>
+
+        <CCol lg={7}>
+          <CCard className="h-100">
+            <CCardHeader>
+              <SectionTitle icon={Clock3} title="Analysis progress" text="The pipeline is complete when scored approvals are ready." />
+            </CCardHeader>
+            <CCardBody>
+              <CListGroup flush>
+                {statusSteps.map((step, index) => {
+                  const isComplete = isAnalyzing && index < analysisStepIndex;
+                  const isActive = isAnalyzing && index === analysisStepIndex;
+                  const stateLabel = isActive
+                    ? "In progress"
+                    : isComplete
+                      ? statusDescriptions[step]
+                      : "Waiting";
+
+                  return (
+                  <CListGroupItem
+                    className={`status-step ${isComplete ? "complete" : ""} ${isActive ? "active" : ""}`}
+                    key={step}
+                  >
+                    <span className="status-marker">
+                      <CheckCircle2 size={18} />
+                    </span>
+                    <div>
+                      <strong>{formatEnum(step)}</strong>
+                      <div className="text-body-secondary small">{stateLabel}</div>
+                    </div>
+                  </CListGroupItem>
+                  );
+                })}
+              </CListGroup>
+            </CCardBody>
+          </CCard>
+        </CCol>
+      </CRow>
+
+    </CContainer>
+  );
+}
+
+function ApprovalsPage({
+  approvals,
+  query,
+  riskFilter,
+  onQueryChange,
+  onRiskFilterChange,
+  onOpenApproval,
+}: {
+  approvals: Approval[];
+  query: string;
+  riskFilter: "ALL" | RiskLevel;
+  onQueryChange: (value: string) => void;
+  onRiskFilterChange: (value: "ALL" | RiskLevel) => void;
+  onOpenApproval: (approval: Approval) => void;
+}) {
+  return (
+    <CContainer fluid className="px-0">
+      <CRow className="g-3 mb-4">
+        <MetricCard icon={ShieldAlert} label="Critical cases" value="2" color="danger" />
+        <MetricCard icon={AlertTriangle} label="High-risk cases" value="3" color="warning" />
+        <MetricCard icon={BarChart3} label="Average risk score" value="60.2" />
+      </CRow>
+
+      <CCard>
+        <CCardHeader className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+          <div>
+            <strong>Suspicious approvals</strong>
+            <CFormText>Search by return, order, customer, or agent.</CFormText>
+          </div>
+          <div className="filters">
+            <CInputGroup>
+              <CInputGroupText>
+                <Search size={16} />
+              </CInputGroupText>
+              <CFormInput onChange={(event) => onQueryChange(event.target.value)} placeholder="Search ID" value={query} />
+            </CInputGroup>
+            <CInputGroup>
+              <CInputGroupText>
+                <Filter size={16} />
+              </CInputGroupText>
+              <CFormSelect
+                onChange={(event) => onRiskFilterChange(event.target.value as "ALL" | RiskLevel)}
+                value={riskFilter}
+              >
+                <option value="ALL">All risk levels</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </CFormSelect>
+            </CInputGroup>
+          </div>
+        </CCardHeader>
+        <CCardBody>
+          <DataTable
+            columns={[
+              "returnId",
+              "customerId",
+              "supportAgentId",
+              "refundAmount",
+              "decision",
+              "riskScore",
+              "riskLevel",
+              "topReason",
+              "",
+            ]}
+            rows={approvals}
+            renderCell={(row, column) => {
+              if (column === "refundAmount") return formatMoney(row.refundAmount);
+              if (column === "decision") return formatEnum(row.decision);
+              if (column === "riskLevel") return <RiskBadge level={row.riskLevel} />;
+              if (column === "riskScore") return <ScoreBar score={row.riskScore} />;
+              if (column === "") {
+                return (
+                  <CButton color="primary" size="sm" variant="outline" onClick={() => onOpenApproval(row)}>
+                    Review
+                  </CButton>
+                );
+              }
+              return row[column as keyof Approval] as string | number;
+            }}
+          />
+        </CCardBody>
+      </CCard>
+    </CContainer>
+  );
+}
+
+function DetailsPage({
+  approval,
+  onOpenApproval,
+}: {
+  approval: ReturnRisk;
+  onOpenApproval: (approval: Approval) => void;
+}) {
+  return (
+    <CContainer fluid className="px-0">
+      <CCard className="mb-4">
+        <CCardBody className="details-hero">
+          <div>
+            <div className="eyebrow">Refund approval details</div>
+            <h2>{approval.returnId}</h2>
+            <p className="text-body-secondary mb-0">{approval.topReason}</p>
+          </div>
+          <CCard className="risk-card">
+            <CCardBody>
+              <div className="text-body-secondary">Risk score</div>
+              <strong>{approval.riskScore}</strong>
+              <RiskBadge level={approval.riskLevel} />
+            </CCardBody>
+          </CCard>
+        </CCardBody>
+      </CCard>
+
+      <CRow className="g-4 mb-4">
+        <InfoPanel
+          title="Return request"
+          rows={[
+            ["Return ID", approval.returnId],
+            ["Reason", formatEnum(approval.returnReason)],
+            ["Refund amount", formatMoney(approval.refundAmount)],
+            ["Evidence", approval.evidenceProvided ? "Provided" : "Missing"],
+          ]}
+        />
+        <InfoPanel
+          title="Order"
+          rows={[
+            ["Order ID", approval.orderId],
+            ["Order amount", formatMoney(approval.orderAmount)],
+            ["Category", formatEnum(approval.productCategory)],
+            ["Payment", formatEnum(approval.paymentMethod)],
+          ]}
+        />
+        <InfoPanel
+          title="Decision"
+          rows={[
+            ["Agent", approval.supportAgentId],
+            ["Result", formatEnum(approval.decision)],
+            ["Manual override", approval.manualOverride ? "Yes" : "No"],
+            ["Decision time", `${approval.decisionTimeMinutes} min`],
+          ]}
+        />
+      </CRow>
+
+      <CRow className="g-4 mb-4">
+        <CCol lg={7}>
+          <CCard className="h-100">
+            <CCardHeader>
+              <strong>Why this is risky</strong>
+            </CCardHeader>
+            <CListGroup flush>
+              {approval.explanations.map((item) => (
+                <CListGroupItem className="explanation-item" key={item.type}>
+                  <div>
+                    <strong>{formatEnum(item.type)}</strong>
+                    <div className="text-body-secondary">{item.message}</div>
+                  </div>
+                  <CBadge color="danger">+{item.scoreImpact}</CBadge>
+                </CListGroupItem>
+              ))}
+            </CListGroup>
+          </CCard>
+        </CCol>
+        <CCol lg={5}>
+          <CCard className="h-100">
+            <CCardHeader>
+              <strong>Investigation context</strong>
+            </CCardHeader>
+            <CCardBody>
+              <CRow className="g-3">
+                <Signal icon={UserRound} title="Customer returns" value="8 of 14 orders" color="warning" />
+                <Signal icon={UsersRound} title="Agent approval rate" value="94%" color="danger" />
+                <Signal icon={Gauge} title="Manual overrides" value="2.8x team median" color="danger" />
+              </CRow>
+            </CCardBody>
+          </CCard>
+        </CCol>
+      </CRow>
+
+      <CCard>
+        <CCardHeader>
+          <strong>Related approvals</strong>
+        </CCardHeader>
+        <CCardBody>
+          <DataTable
+            columns={["returnId", "customerId", "supportAgentId", "refundAmount", "riskScore", "riskLevel", ""]}
+            rows={approval.relatedApprovals}
+            renderCell={(row, column) => {
+              if (column === "refundAmount") return formatMoney(row.refundAmount);
+              if (column === "riskLevel") return <RiskBadge level={row.riskLevel} />;
+              if (column === "riskScore") return <ScoreBar score={row.riskScore} />;
+              if (column === "") {
+                return (
+                  <CButton color="primary" size="sm" variant="outline" onClick={() => onOpenApproval(row)}>
+                    Review
+                  </CButton>
+                );
+              }
+              return row[column as keyof Approval] as string | number;
+            }}
+          />
+        </CCardBody>
+      </CCard>
+    </CContainer>
+  );
+}
+
+function SectionTitle({
+  icon: Icon,
+  title,
+  text,
+}: {
+  icon: typeof Upload;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="section-title">
+      <span className="icon-box">
+        <Icon size={18} />
+      </span>
+      <div>
+        <strong>{title}</strong>
+        <CFormText>{text}</CFormText>
+      </div>
+    </div>
+  );
+}
+
+function InfoPanel({ title, rows }: { title: string; rows: Array<[string, string]> }) {
+  return (
+    <CCol lg={4}>
+      <CCard className="h-100">
+        <CCardHeader>
+          <strong>{title}</strong>
+        </CCardHeader>
+        <CListGroup flush>
+          {rows.map(([label, value]) => (
+            <CListGroupItem className="info-row" key={label}>
+              <span className="text-body-secondary">{label}</span>
+              <strong>{value}</strong>
+            </CListGroupItem>
+          ))}
+        </CListGroup>
+      </CCard>
+    </CCol>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  color = "secondary",
+}: {
+  icon: typeof Upload;
+  label: string;
+  value: string;
+  color?: "secondary" | "warning" | "danger";
+}) {
+  return (
+    <CCol sm={6} xl={4}>
+      <CCard className="metric-card h-100">
+        <CCardBody>
+          <CBadge color={color} className="metric-icon">
+            <Icon size={18} />
+          </CBadge>
+          <div className="text-body-secondary mt-3">{label}</div>
+          <strong>{value}</strong>
+        </CCardBody>
+      </CCard>
+    </CCol>
+  );
+}
+
+function Signal({
+  icon: Icon,
+  title,
+  value,
+  color,
+}: {
+  icon: typeof Upload;
+  title: string;
+  value: string;
+  color: "warning" | "danger";
+}) {
+  return (
+    <CCol sm={6} xl={4}>
+      <CCard className="h-100">
+        <CCardBody>
+          <CBadge color={color} className="metric-icon">
+            <Icon size={18} />
+          </CBadge>
+          <div className="text-body-secondary mt-3">{title}</div>
+          <strong>{value}</strong>
+        </CCardBody>
+      </CCard>
+    </CCol>
+  );
+}
+
+function DataTable<T extends Record<string, unknown>>({
+  columns,
+  rows,
+  renderCell,
+}: {
+  columns: string[];
+  rows: T[];
+  renderCell: (row: T, column: string) => React.ReactNode;
+}) {
+  return (
+    <CTable align="middle" hover responsive>
+      <CTableHead>
+        <CTableRow>
+          {columns.map((column) => (
+            <CTableHeaderCell key={column}>{columnLabels[column] ?? column}</CTableHeaderCell>
+          ))}
+        </CTableRow>
+      </CTableHead>
+      <CTableBody>
+        {rows.map((row, index) => (
+          <CTableRow key={String(row.returnId ?? row.order_id ?? index)}>
+            {columns.map((column) => (
+              <CTableDataCell key={column}>{renderCell(row, column)}</CTableDataCell>
+            ))}
+          </CTableRow>
+        ))}
+      </CTableBody>
+    </CTable>
+  );
+}
+
+function RiskBadge({ level }: { level: RiskLevel }) {
+  const colorByLevel: Record<RiskLevel, "success" | "info" | "warning" | "danger"> = {
+    LOW: "success",
+    MEDIUM: "info",
+    HIGH: "warning",
+    CRITICAL: "danger",
+  };
+  return <CBadge color={colorByLevel[level]}>{formatEnum(level)}</CBadge>;
+}
+
+function ScoreBar({ score }: { score: number }) {
+  const color = score > 80 ? "danger" : score > 60 ? "warning" : score > 30 ? "info" : "success";
+  return (
+    <div className="score-cell">
+      <span>{score}</span>
+      <CProgress height={8}>
+        <CProgressBar color={color} value={score} />
+      </CProgress>
+    </div>
+  );
+}
+
+function formatPreviewCell(value: string) {
+  if (value === "true") return "Yes";
+  if (value === "false") return "No";
+  if (/^[A-Z_]+$/.test(value) || value.includes("_")) return formatEnum(value);
+  return value;
+}
+
+export default App;
