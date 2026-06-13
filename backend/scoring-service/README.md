@@ -1,152 +1,127 @@
 <h1 align="center">Scoring Service</h1>
 
-<p align="center">
-  The service provides risk scores, risk levels, explanations, and mock suspicious users for the frontend during the first development stage.
-</p>
+The Scoring Service calculates refund approval risk scores for suspicious refund approvals in e-commerce support workflows.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Kotlin-1.9.25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
-  <img src="https://img.shields.io/badge/Spring%20Boot-3.3.5-6DB33F?style=for-the-badge&logo=springboot&logoColor=white" alt="Spring Boot" />
-  <img src="https://img.shields.io/badge/Gradle-Kotlin%20DSL-02303A?style=for-the-badge&logo=gradle&logoColor=white" alt="Gradle" />
-  <img src="https://img.shields.io/badge/Java-17-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java 17" />
-</p>
+It is responsible for:
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Spring%20Web-REST%20API-6DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Web" />
-  <img src="https://img.shields.io/badge/Actuator-Health%20Checks-6DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Boot Actuator" />
-<img src="https://img.shields.io/badge/RabbitMQ-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white" alt="RabbitMQ" />
-</p>
+* `RefundApprovalRiskScore`;
+* `SuspiciousRefundApproval`;
+* risk levels;
+* scoring rules;
+* explanations;
+* suspicious refund approvals API;
+* consuming `refund.relations.built`;
+* publishing `refund.scoring.completed`.
 
 <h2 align="center">Service Flow</h2>
 
 ```mermaid
 flowchart TD
-    A[Relations Service] -->|publish relations.built| B[RabbitMQ]
-    B -->|consume relations.built| C[Scoring Service]
+    A[Graph / Relations Service] -->|publish refund.relations.built| B[RabbitMQ Direct Exchange]
+    B -->|consume refund.relations.built| C[Scoring Service]
 
-    C --> D[Read Mock Features]
-    D --> E[Rule-based Scoring]
-    E --> F[Risk Score + Reasons]
+    C --> D[Read refund relation features]
+    D --> E[Rule-based refund approval scoring]
+    E --> F[Risk score + risk level + explanations]
 
-    F -->|publish scoring.completed| B
+    F -->|save scores / explanations| G[(PostgreSQL)]
+    C -->|publish refund.scoring.completed| B
     C -->|on error publish pipeline.failed| B
 
-    G[Frontend] -->|REST via Nginx| H[Scoring Controller]
-    H --> C
-    C --> I[JSON API Response]
-    I --> G
+    H[Frontend] -->|REST via Nginx| I[Scoring API]
+    I --> C
 ```
-
-<h2 align="center">Rule-based Scoring Draft</h2>
-
-<div align="center">
-
-<table>
-  <thead>
-    <tr>
-      <th align="center">Feature</th>
-      <th align="center">Condition</th>
-      <th align="center">Score Impact</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">Same device usage</td>
-      <td align="center"><code>sameDeviceUserCount &gt;= 3</code></td>
-      <td align="center"><code>+30</code></td>
-    </tr>
-    <tr>
-      <td align="center">Same IP usage</td>
-      <td align="center"><code>sameIpUserCount &gt;= 3</code></td>
-      <td align="center"><code>+20</code></td>
-    </tr>
-    <tr>
-      <td align="center">Promo abuse</td>
-      <td align="center"><code>promoUsageCount &gt;= 5</code></td>
-      <td align="center"><code>+20</code></td>
-    </tr>
-    <tr>
-      <td align="center">Suspicious referral</td>
-      <td align="center"><code>hasSuspiciousReferral == true</code></td>
-      <td align="center"><code>+30</code></td>
-    </tr>
-  </tbody>
-</table>
-
-</div>
-
 
 <h2 align="center">API Endpoints</h2>
 
-<div align="center">
+```text
+GET /api/scoring/health
+GET /api/scoring/datasets/{datasetId}/suspicious-approvals
+GET /api/scoring/returns/{returnId}/risk
+GET /api/scoring/agents/{agentId}/risk-summary
+POST /api/scoring/datasets/{datasetId}/recalculate
+```
 
-<table>
-  <thead>
-    <tr>
-      <th align="center">Endpoint</th>
-      <th align="center">Command</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">Health Check</td>
-      <td align="left"><code>curl http://localhost:8081/api/scoring/health</code></td>
-    </tr>
-    <tr>
-      <td align="center">Get Suspicious Users</td>
-      <td align="left"><code>curl http://localhost:8081/api/scoring/datasets/demo/suspicious-users | jq</code></td>
-    </tr>
-    <tr>
-      <td align="center">Get User Risk</td>
-      <td align="left"><code>curl http://localhost:8081/api/scoring/users/user_123/risk | jq</code></td>
-    </tr>
-    <tr>
-      <td align="center">Recalculate Dataset</td>
-      <td align="left"><code>curl -X POST http://localhost:8081/api/scoring/datasets/demo/recalculate | jq</code></td>
-    </tr>
-  </tbody>
-</table>
+<h2 align="center">Risk Factors</h2>
 
-</div>
+```text
+NO_EVIDENCE
+HIGH_VALUE_REFUND
+FULL_AMOUNT_REFUND
+FAST_APPROVAL
+MANUAL_OVERRIDE
+AGENT_HIGH_APPROVAL_RATE
+CUSTOMER_FREQUENT_RETURNS
+REPEATED_AGENT_CUSTOMER_PAIR
+SUSPICIOUS_CLUSTER
+```
 
+<h2 align="center">Rule-Based Scoring Draft</h2>
 
-<h2 align="center">Example Suspicious User Response</h2>
+| Rule | Condition | Score Impact |
+| --- | --- | --- |
+| NO_EVIDENCE | Refund approved without evidence | +25 |
+| HIGH_VALUE_REFUND | Refund amount is above threshold | +20 |
+| FULL_AMOUNT_REFUND | Refund amount is close to order amount | +15 |
+| FAST_APPROVAL | Approval happened too quickly | +15 |
+| MANUAL_OVERRIDE | Manual override was used | +20 |
+| AGENT_HIGH_APPROVAL_RATE | Agent approval rate is unusually high | +30 |
+| CUSTOMER_FREQUENT_RETURNS | Customer has many refund requests | +20 |
+| REPEATED_AGENT_CUSTOMER_PAIR | Same agent repeatedly approves same customer | +25 |
+| SUSPICIOUS_CLUSTER | Approval belongs to suspicious graph cluster | +25 |
+
+<h2 align="center">Risk Levels</h2>
+
+```text
+0-30 LOW
+31-60 MEDIUM
+61-80 HIGH
+81-100 CRITICAL
+```
+
+<h2 align="center">Events</h2>
+
+Consumes:
+
+```text
+refund.relations.built
+```
+
+Publishes:
+
+```text
+refund.scoring.completed
+```
+
+<h2 align="center">Example Suspicious Refund Approval Response</h2>
 
 ```json
 {
-  "userId": "user_123",
-  "riskScore": 87,
+  "returnId": "return_123",
+  "orderId": "order_456",
+  "customerId": "customer_789",
+  "supportAgentId": "agent_001",
+  "refundAmount": 249.99,
+  "decision": "APPROVED",
+  "riskScore": 84,
   "riskLevel": "HIGH",
-  "topReason": "Same device used by 5 users",
-  "relatedUsersCount": 6
+  "topReason": "Refund approved without evidence for a high-value order",
+  "reasons": [
+    {
+      "type": "NO_EVIDENCE",
+      "message": "Refund was approved without required evidence",
+      "scoreImpact": 25
+    },
+    {
+      "type": "HIGH_VALUE_REFUND",
+      "message": "Refund amount is above threshold",
+      "scoreImpact": 20
+    },
+    {
+      "type": "AGENT_HIGH_APPROVAL_RATE",
+      "message": "Support agent approval rate is unusually high",
+      "scoreImpact": 30
+    }
+  ]
 }
 ```
-
-<h2 align="center">Local Run, Build and Test</h2>
-
-<div align="center">
-
-<table>
-  <thead>
-    <tr>
-      <th align="center">Action</th>
-      <th align="center">Command</th>
-      <th align="center">Result</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">Run service</td>
-      <td align="left"><code>./gradlew bootRun</code></td>
-      <td align="left">Starts the service on <code>http://localhost:8081</code></td>
-    </tr>
-    <tr>
-      <td align="center">Build and test</td>
-      <td align="left"><code>./gradlew clean build</code></td>
-      <td align="left">Compiles the project and runs tests</td>
-    </tr>
-  </tbody>
-</table>
-
-</div>
-
