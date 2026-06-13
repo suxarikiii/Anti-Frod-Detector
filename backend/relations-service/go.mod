@@ -1,0 +1,8 @@
+module relations-service
+
+go 1.22
+
+require (
+	github.com/gorilla/mux v1.8.0
+	github.com/rabbitmq/amqp091-go v1.9.0
+)
