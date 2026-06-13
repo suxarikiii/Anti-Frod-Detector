@@ -305,6 +305,12 @@ const columnLabels: Record<string, string> = {
   decision_time_minutes: "Decision time",
 };
 
+function getInitialPage(): Page {
+  const pageParam = new URLSearchParams(window.location.search).get("page");
+  if (pageParam === "approvals" || pageParam === "details") return pageParam;
+  return "dataset";
+}
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -334,7 +340,7 @@ async function fetchJson<T>(url: string, fallback: T): Promise<T> {
 }
 
 function App() {
-  const [page, setPage] = useState<Page>("dataset");
+  const [page, setPage] = useState<Page>(getInitialPage);
   const [uploadedFile, setUploadedFile] = useState("refunds_week1_demo.csv");
   const [uploadProgress, setUploadProgress] = useState(100);
   const [selectedApproval, setSelectedApproval] = useState<ReturnRisk>(riskDetails);
