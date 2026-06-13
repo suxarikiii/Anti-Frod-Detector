@@ -55,3 +55,13 @@ related refund approvals
 6. Open suspicious refund approvals.
 7. Investigate one refund approval.
 8. Review customer return history, support agent approval behavior, and related refund approvals.
+
+<h2 align="center">Design and MVP Deliverables</h2>
+
+Designer-facing wireframes, user flow diagrams, implemented MVP feature descriptions, and screenshots are available in:
+
+```text
+../docs/design-wireframes.md
+../docs/mvp-features-and-user-journeys.md
+../docs/assets/screenshots/
+```

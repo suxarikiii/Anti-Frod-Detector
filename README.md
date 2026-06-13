@@ -237,7 +237,7 @@ flowchart LR
   </tr>
 
   <tr>
-    <td align="center" rowspan="10"><b>Documentation</b></td>
+    <td align="center" rowspan="12"><b>Documentation</b></td>
     <td align="center"><a href="./docs/project-plan.md"><b>Project Plan</b></a></td>
     <td align="center">7-week project plan, milestones, and expected results</td>
   </tr>
@@ -248,6 +248,14 @@ flowchart LR
   <tr>
     <td align="center"><a href="./docs/demo-flow.md"><b>Demo Flow</b></a></td>
     <td align="center">Demo scenario for showing the full refund approval analysis workflow</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/design-wireframes.md"><b>Design Wireframes</b></a></td>
+    <td align="center">Designer-facing wireframes, mockup screenshots, and user flow diagrams</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/mvp-features-and-user-journeys.md"><b>MVP Features and User Journeys</b></a></td>
+    <td align="center">Implemented MVP features, functional user journey, screenshots, and demo narrative</td>
   </tr>
   <tr>
     <td align="center"><a href="./docs/team-roles.md"><b>Team Roles</b></a></td>
